@@ -1,6 +1,9 @@
 import numpy as np
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.sparse import csr_matrix
+
 from .apps import nlp_model_spaCy
 
 # Create your views here.
@@ -50,7 +53,28 @@ def process_content(request):
                 'index': index
             }
         )
-        
+
+    if (not sentence_data):
+        print('Error: no sentence data collected.')
+        return
     
+    # Gather all of each type of data
+    all_sentence_sentences = np.array([item['sentence'] for item in sentence_data])
+    all_sentence_embeddings = np.array([item['embedding'] for item in sentence_data])
+    all_sentence_indices = np.array([item['index'] for item in sentence_data])
+    num_sentences = len(sentence_data)
+
+    if (not np.any(all_sentence_embeddings)):
+        print('Error: all sentence embeddings are zero. Cannot calculate meaningful similarities.')
+        
+    # Step 4 -> Textrank graph construction and scoring
+    sentence_pairwise_similarities = cosine_similarity(all_sentence_embeddings, all_sentence_embeddings)
+    non_self_similarities = sentence_pairwise_similarities[~np.eye(num_sentences, dtype=bool)].flatten()
+    textrank_edge_threshold = np.percentile(non_self_similarities, 15)
+    graph_matrix = np.where(sentence_pairwise_similarities > textrank_edge_threshold, sentence_pairwise_similarities, 0)
+    np.fill_diagonal(graph_matrix, 0)
+    row_sums = graph_matrix.sum(axis=1)
+    graph_matrix = graph_matrix / np.maximum(row_sums, 1e-9)[:, np.newaxis]
+    print(graph_matrix.sum(axis=1))
    
     return HttpResponse('dummy')
