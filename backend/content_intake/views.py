@@ -6,6 +6,27 @@ from scipy.sparse import csr_matrix
 
 from .apps import nlp_model_spaCy
 
+def textrank(graph_matrix, damping_factor:float=0.85, max_iterations:int=100, tolerance=1e-6): # Probably could use personalized page rank in the future
+    
+    # Init num_nodes, weights, jump probs
+    num_nodes = graph_matrix.shape[0]
+    weights = np.ones(num_nodes) / num_nodes
+    jump_factor = np.ones(num_nodes) / num_nodes
+
+    # Iteratively update weights of each node via page rank formula
+    for iteration in range(max_iterations):
+        weights_old = weights.copy()
+        weights_new = damping_factor * (graph_matrix.T @ weights_old) + (1 - damping_factor) * jump_factor
+
+        # Conv check
+        if (np.linalg.norm(weights_new - weights_old, ord=1) < tolerance):
+            break
+        weights = weights_new
+        
+    # Normalization
+    weights = weights / np.sum(weights)
+    return weights
+
 # Create your views here.
 def process_content(request):
 
@@ -75,6 +96,57 @@ def process_content(request):
     np.fill_diagonal(graph_matrix, 0)
     row_sums = graph_matrix.sum(axis=1)
     graph_matrix = graph_matrix / np.maximum(row_sums, 1e-9)[:, np.newaxis]
-    print(graph_matrix.sum(axis=1))
-   
+    textrank_scores = textrank(graph_matrix)
+    if (textrank_scores.max() > 0):
+        textrank_scores = textrank_scores / textrank_scores.max()
+    
+    # Step 5 -> Identify main claims
+    ranked_candidates = []
+    for i, data in enumerate(sentence_data):
+
+        # Set positional bonus
+        positional_bonus = 0
+        if (data['index'] == 0):
+            positional_bonus = 0.2
+        elif (data['index'] == 1): 
+            positional_bonus = 0.1
+        elif (data['index'] == num_sentences - 1):
+            positional_bonus = 0.05
+
+        # Compute total scores for the candidates
+        total_score = positional_bonus + textrank_scores[i]
+        ranked_candidates.append(
+            {
+                'sentence': data['sentence'],
+                'embedding': data['embedding'],
+                'index': data['index'],
+                'textrank_score': textrank_scores[i],
+                'score': total_score
+            }
+        )
+    ranked_candidates.sort(key=lambda item: item['score'], reverse=True)
+
+    main_claims_info = []
+    assigned_indices = set()
+
+    for candidate in ranked_candidates:
+        if (candidate['index'] not in assigned_indices):
+            main_claims_info.append(
+                { 
+                    'sentence': candidate['sentence'],
+                    'embedding': candidate['embedding'],
+                    'index': candidate['index'],
+                    'textrank_score': candidate['textrank_score'],
+                    'score': candidate['score']
+                }
+            )
+            assigned_indices.add(candidate['index'])
+            if (len(main_claims_info) >= 4):
+                break
+    
+    main_claims_info.sort(key=lambda item: item['index'])
+    print('NOTE: TESTING HERE:\n') # NOTE: DEBUG
+    for index, claim in enumerate(main_claims_info):
+        print(f"CLAIM #{ index + 1 }: { claim['sentence'] }")
+
     return HttpResponse('dummy')
