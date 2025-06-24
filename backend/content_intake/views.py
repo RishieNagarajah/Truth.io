@@ -1,4 +1,5 @@
 import numpy as np
+import pprint
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
 from sklearn.metrics.pairwise import cosine_similarity
@@ -145,8 +146,46 @@ def process_content(request):
                 break
     
     main_claims_info.sort(key=lambda item: item['index'])
-    print('NOTE: TESTING HERE:\n') # NOTE: DEBUG
+
+    # Step 6 -> Identify the supporting claims
+    for index, claim in enumerate(main_claims_info):
+
+        # Get and init fields for supporting sentences
+        claim_embedding = main_claims_info[index]['embedding'].reshape(1, -1)
+        claim_index = main_claims_info[index]['index']
+        main_claims_info[index]['support'] = []
+
+        for neighbor_data in sentence_data:
+            
+            # Get neighbor details
+            neighbor_sentence = neighbor_data['sentence']
+            neighbor_embedding = neighbor_data['embedding'].reshape(1, -1)
+            neighbor_index = neighbor_data['index']
+
+            # Linear pass method, so skip same sentences or those that are main claims
+            if (neighbor_index == claim_index or neighbor_index in assigned_indices):
+                continue
+
+            # Proximity window heuristic for how far supporting sentences can be from the main claim
+            is_within_proximity = (abs(neighbor_index - claim_index) <= 5)
+            similarity_to_claim = cosine_similarity(neighbor_embedding, claim_embedding).flatten()[0]
+            if (is_within_proximity and similarity_to_claim >= 0.65):
+                main_claims_info[index]['support'].append(
+                    { 
+                        'index': neighbor_index,
+                        'similarity_score': similarity_to_claim,
+                        'sentence': neighbor_sentence
+                    }
+                )
+                assigned_indices.add(neighbor_index)
+            main_claims_info[index]['support'].sort(key=lambda item: item['index'])
+
+    # NOTE: DEBUG
+    print('NOTE: OUTPUT TEST:\n') 
     for index, claim in enumerate(main_claims_info):
         print(f"CLAIM #{ index + 1 }: { claim['sentence'] }")
+        print("SUPPORTINGN DETAILS:")
+        for support in claim['support']:
+            pprint.pprint(support)
 
     return HttpResponse('dummy')
