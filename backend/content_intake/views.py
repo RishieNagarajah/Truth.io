@@ -29,7 +29,7 @@ def textrank(graph_matrix, damping_factor:float=0.85, max_iterations:int=100, to
     return weights
 
 # Create your views here.
-def process_content(request):
+def process_content_1(request):
 
     # Step 1: 
     # Text extraction and cleaning - to be replaced with Rishie's code, using dummy text for now
@@ -67,7 +67,7 @@ def process_content(request):
         sentence_vectorized = [token.vector for token in sentence if (token.has_vector and token.vector.ndim > 0 and not token.is_space and token.text.strip())]
         sentence_embedding = np.zeros(nlp_model_spaCy.vocab.vectors.shape[1], dtype=np.float32)
         if (sentence_vectorized): 
-            sentence_embedding = np.mean(sentence_vectorized, axis=0, dtype=np.float32)
+            sentence_embedding = np.median(sentence_vectorized, axis=0)
         sentence_data.append(
             {
                 'sentence': cleaned_sentence,
@@ -169,7 +169,7 @@ def process_content(request):
             # Proximity window heuristic for how far supporting sentences can be from the main claim
             is_within_proximity = (abs(neighbor_index - claim_index) <= 5)
             similarity_to_claim = cosine_similarity(neighbor_embedding, claim_embedding).flatten()[0]
-            if (is_within_proximity and similarity_to_claim >= 0.65):
+            if (is_within_proximity and similarity_to_claim >= 0.85 and len(main_claims_info[index]['support']) <= 4):
                 main_claims_info[index]['support'].append(
                     { 
                         'index': neighbor_index,
@@ -177,15 +177,22 @@ def process_content(request):
                         'sentence': neighbor_sentence
                     }
                 )
-                assigned_indices.add(neighbor_index)
+                #assigned_indices.add(neighbor_index)
             main_claims_info[index]['support'].sort(key=lambda item: item['index'])
 
     # NOTE: DEBUG
     print('NOTE: OUTPUT TEST:\n') 
     for index, claim in enumerate(main_claims_info):
         print(f"CLAIM #{ index + 1 }: { claim['sentence'] }")
-        print("SUPPORTINGN DETAILS:")
+        print("SUPPORTING DETAILS:")
         for support in claim['support']:
             pprint.pprint(support)
 
+    return HttpResponse('dummy')
+
+# Create your views here.
+def process_content_2(request):
+    
+
+    
     return HttpResponse('dummy')
