@@ -5,8 +5,60 @@ from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import csr_matrix
+import re
+import requests
+from bs4 import BeautifulSoup
+import bleach
+from PyPDF2 import PdfReader
+from urllib.parse import urlparse
+from .utils import fetch_and_extract_text
 
 from .apps import nlp_model_spaCy, keyword_model, sentence_model
+MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2 MB
+
+def is_valid_url(url):
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and bool(parsed.netloc)
+
+def fetch_and_extract_text(url):
+    # 1. URL validation
+    if not is_valid_url(url):
+        return None, "Invalid or insecure URL. Only HTTPS links are allowed."
+    try:
+        resp = requests.get(url, timeout=10, stream=True)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "")
+        content_length = int(resp.headers.get("Content-Length", 0) or 0)
+        if content_length > MAX_CONTENT_LENGTH:
+            return None, "Content too large. Limit is 2MB."
+        # 2. Content extraction
+        if "text/html" in content_type:
+            html = resp.content.decode(resp.encoding or "utf-8", errors="replace")
+            soup = BeautifulSoup(html, "html.parser")
+            # 5. Sanitization
+            for tag in soup(["script", "iframe", "style", "object", "embed"]):
+                tag.decompose()
+            text = soup.get_text(separator="\n", strip=True)
+            clean_text = bleach.clean(text, tags=[], strip=True)
+            return clean_text, None
+        elif "application/pdf" in content_type or url.lower().endswith(".pdf"):
+            # Save PDF to memory and extract
+            pdf_bytes = resp.content
+            if len(pdf_bytes) > MAX_CONTENT_LENGTH:
+                return None, "PDF too large. Limit is 2MB."
+            try:
+                reader = PdfReader(io.BytesIO(pdf_bytes))
+                text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                clean_text = bleach.clean(text, tags=[], strip=True)
+                return clean_text, None
+            except Exception:
+                return None, "Could not extract text from PDF."
+        else:
+            return None, "Unsupported content type."
+    except requests.RequestException as e:
+        return None, f"Error fetching URL: {str(e)}"
+    except Exception as e:
+        return None, f"Unexpected error: {str(e)}"
 
 def textrank(graph_matrix, damping_factor:float=0.85, max_iterations:int=100, tolerance=1e-6): # Probably could use personalized page rank in the future
     
