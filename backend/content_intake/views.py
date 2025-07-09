@@ -1,12 +1,6 @@
 import numpy as np
 import pprint
 import heapq
-<<<<<<< HEAD
-import numpy as np
-import pprint
-import heapq
-=======
->>>>>>> ae78550ae0e890dfc520b5feb7a2351e819554eb
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
 from sklearn.metrics.pairwise import cosine_similarity
@@ -18,8 +12,6 @@ import bleach
 from PyPDF2 import PdfReader
 from urllib.parse import urlparse
 from .utils import fetch_and_extract_text
-
-
 
 from .apps import nlp_model_spaCy, keyword_model, sentence_model
 MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2 MB
