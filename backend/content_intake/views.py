@@ -1,9 +1,12 @@
 import numpy as np
 import pprint
 import heapq
+<<<<<<< HEAD
 import numpy as np
 import pprint
 import heapq
+=======
+>>>>>>> ae78550ae0e890dfc520b5feb7a2351e819554eb
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
 from sklearn.metrics.pairwise import cosine_similarity
