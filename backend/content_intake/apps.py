@@ -26,8 +26,8 @@ class ContentIntakeConfig(AppConfig):
                 print('spaCy model "en_core_web_lg" loaded successfully!')
 
                 # Load sentence model 
-                sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-                keyword_model = KeyBERT(model=sentence_model)
+                # sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+                # keyword_model = KeyBERT(model=sentence_model)
                 print('Keyword model "all-MiniLM-L6-v2" loaded successfully!')
 
             except OSError:

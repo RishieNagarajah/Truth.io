@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 import bleach
 from PyPDF2 import PdfReader
 from urllib.parse import urlparse
-from .utils import fetch_and_extract_text
+# from .utils import fetch_and_extract_text
 
 from .apps import nlp_model_spaCy, keyword_model, sentence_model
 MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2 MB
@@ -20,17 +20,20 @@ def is_valid_url(url):
     parsed = urlparse(url)
     return parsed.scheme == "https" and bool(parsed.netloc)
 
-def fetch_and_extract_text(url):
+def fetch_and_extract_text(request): # The first parameter MUST be 'request'
+    # Get the URL from the GET parameters, e.g., /fetch_and_extract_text?url=https://example.com
+    # Provide a default if 'url' parameter is not found in the request
+    url = request.GET.get('url', "https://www.therecord.com/news/crime/cambridge-man-arrested-at-campground-charged-with-impaired-resist-arrest/article_9de66917-44b0-51a2-a555-7dbf321f0b34.html")
     # 1. URL validation
     if not is_valid_url(url):
-        return None, "Invalid or insecure URL. Only HTTPS links are allowed."
+        return JsonResponse({"error": "Invalid or insecure URL. Only HTTPS links are allowed."}, status=400)
     try:
         resp = requests.get(url, timeout=10, stream=True)
         resp.raise_for_status()
         content_type = resp.headers.get("Content-Type", "")
         content_length = int(resp.headers.get("Content-Length", 0) or 0)
         if content_length > MAX_CONTENT_LENGTH:
-            return None, "Content too large. Limit is 2MB."
+            return JsonResponse({"error": "Content too large. Limit is 2MB."}, status=413)
         # 2. Content extraction
         if "text/html" in content_type:
             html = resp.content.decode(resp.encoding or "utf-8", errors="replace")
@@ -40,25 +43,25 @@ def fetch_and_extract_text(url):
                 tag.decompose()
             text = soup.get_text(separator="\n", strip=True)
             clean_text = bleach.clean(text, tags=[], strip=True)
-            return clean_text, None
+            return JsonResponse({"text": clean_text})
         elif "application/pdf" in content_type or url.lower().endswith(".pdf"):
             # Save PDF to memory and extract
             pdf_bytes = resp.content
             if len(pdf_bytes) > MAX_CONTENT_LENGTH:
-                return None, "PDF too large. Limit is 2MB."
+                return JsonResponse({"error": "PDF too large. Limit is 2MB."}, status=413)
             try:
                 reader = PdfReader(io.BytesIO(pdf_bytes))
                 text = "\n".join(page.extract_text() or "" for page in reader.pages)
                 clean_text = bleach.clean(text, tags=[], strip=True)
                 return clean_text, None
             except Exception:
-                return None, "Could not extract text from PDF."
+                return JsonResponse({"error": "Could not extract text from PDF."}, status=500)
         else:
-            return None, "Unsupported content type."
+            return JsonResponse({"error": "Unsupported content type."}, status=415)
     except requests.RequestException as e:
-        return None, f"Error fetching URL: {str(e)}"
+        return JsonResponse({"error": f"Error fetching URL: {str(e)}"}, status=502)
     except Exception as e:
-        return None, f"Unexpected error: {str(e)}"
+        return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
 
 def textrank(graph_matrix, damping_factor:float=0.85, max_iterations:int=100, tolerance=1e-6): # Probably could use personalized page rank in the future
     
